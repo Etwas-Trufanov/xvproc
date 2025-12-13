@@ -1,5 +1,12 @@
 #pragma once
-#include "memory_module.hpp"
+
+#include <cmath>
+#include <cstdlib>
+#include <stdexcept>
+#include <iostream>
+#include <vector> // До последнего не хотел его использовать
+#include <memory>
+#include <fstream>
 
 #define raddr std::size_t
 /*
@@ -36,29 +43,167 @@
  not    accumulator     reg1            0       : логическое НЕ
 
  - Операции работы с портами
- prts   reg             port            ret_reg : отправка значения в порт, подключенное устройство обязано ответить в ret_reg
- prtg   reg             port            ret_reg : получение значения в регистр с порта, подключённое устройство обязано ответить
+ prts   reg             port            0       : отправка значения в порт по шине данных
+ ptcs   reg             port            0       : отправить в порт управляющий сигнал из регистра
+ prtg   reg             port            0       : получение значения в регистр с порта
+ prts   reg             port            0       : получить с устройства сигнал состояния
 
- - Операции работы со стеком
- push   reg             0               0       : добавить в стек значение
- pop    reg             offset          0       : получить со стека значение
- call   reg             0               0       : вызвать функцию, автоматически сверху в стек добавляет адресс интрукции
- ret    0               0               0       : выход из функции, переход обратно, адресс берётся с вершины стека
+ !- Операции работы со стеком
+ !push   reg             0               0       : добавить в стек значение
+ !pop    reg             offset          0       : получить со стека значение
+ !call   reg             0               0       : вызвать функцию, автоматически сверху в стек добавляет адресс интрукции
+ !ret    0               0               0       : выход из функции, переход обратно, адресс берётся с вершины стека
 
- - Работа с очередью инструкций
- intr   0               0               0       : вызов прерывания, добавляет в стек адресс инструкции
- scall  0               0               0       : вызов системного вызова, срабатывает автоматически при достижения таймера, так же ложит в стек номер инструкции
 
- - Обработка системных ошибок
- serr   type            0               0       : установить флаг ошибки на какое-то значение
- cerr   0               0               0       : очистить флаг ошибки
+ !- Работа с очередью инструкций
+ !intr   0               0               0       : вызов прерывания, добавляет в стек адресс инструкции
+ !scall  0               0               0       : вызов системного вызова, срабатывает автоматически при достижения таймера, так же ложит в стек номер инструкции
+
+ !- Обработка системных ошибок
+ !serr   type            0               0       : установить флаг ошибки на какое-то значение
+ !cerr   0               0               0       : очистить флаг ошибки
 */
 
+namespace utility_units {
+    // Класс памятиs
+    class memory {
+    private:
+        // Максимальный адрес
+        std::size_t size_ram;
+        // Массив ячеек
+        int *m;
+    public:
+        // Конструктор, принимает размер памяти
+        memory() : size_ram(4096) {
+            m = new int[size_ram];
+        }
+
+        // Геттер из ячейки по адресу
+        // adr - адрес ячейки
+        // Бросается исключение при неверном адресе
+        int get_from_memory(std::size_t adr) {
+            if (adr < size_ram) {
+                return m[adr];
+            }
+            else {
+                throw std::runtime_error("Attempt to access non-existent memory");
+            }
+        }
+
+
+        // Сеттер из ячейки по адресу
+        // adr - адрес ячейки
+        // value - значение
+        // Бросается исключение при неверном адресе
+        void set_to_memory(std::size_t adr, int value) {
+            if (adr < size_ram) {
+                m[adr] = value;
+            }
+            else {
+                throw std::runtime_error("Attempt to access non-existent memory");
+            }
+        }
+
+        // Деструктор
+        ~memory() {
+            delete[] m;
+        }
+
+
+    };
+
+    // Виртуальный класс порта
+    class virtual_port {
+        protected:
+            // Состояние устройства, для каждого устройства свои коды
+            int return_state = 0;
+        public:
+            virtual void send_value(int value) = 0;
+            virtual void send_signal(int value) = 0;
+            virtual void ret_value(int &answer) = 0;
+            virtual void ret_signal(int &answer) = 0;
+            ~virtual_port() = default;
+    };
+
+    // Класс наследник виртуального порта, позволяет работать с терминалом
+    class terminal : public virtual_port {
+            void send_value(int value) override {
+                std::cout << value;
+            }
+
+            void send_signal(int value) override {
+                return;
+            }
+
+            void ret_value(int &answer) override {
+                char a;
+                std::cin >> a;
+                answer = a;
+            }
+
+            void ret_signal(int &answer) override {
+                answer = return_state;
+            }
+    };
+
+    // Класс наследник виртуального порта, позволяет худо бедно работать с файловой системой
+    class disk : public virtual_port {
+        protected:
+            std::string filename;
+            std::fstream f;
+            // Флаг режима работы
+            // 0 - файл закрыт
+            // 1 - файл открыт для чтения
+            // 2 - файл открыт для записи
+            int mode = 0;
+        public:
+
+            // Получили какое-то значение, надо что-то с ним делать
+            void send_value(int value) override {
+                if (f.is_open()) {
+                    f << value;
+                } else {
+                   filename += char(value);
+                }
+            }
+
+            // Получаем контролирующий сигнал
+            // Для фаловой подсистемы
+            // 2 - открыть файл под именем filename в режиме чтения
+            // 3 - в режиме записи
+            void send_signal(int value) override {
+                if (!f.is_open()) {
+                    try {
+                        if (value == 2) {
+                            f.open(filename, std::ios::in);
+                        } else {
+                            f.open(filename, std::ios::out);
+                        }
+                    } catch (std::runtime_error &e) {
+                        f.close();
+                        std::cerr << "\nSYSTEM: Can't open file: " <<filename << "in mode: "<<value << std::endl;;
+                        return_state = 1;
+                    }
+                }
+            }
+
+            void ret_value(int &answer) override {
+                if (f.is_open() and f.) {
+                    char c;
+
+                }
+            }
+
+    };
+}
+
 namespace cpu_unit {
-    bool check_reg_addr(std::size_t regaddr) {
+    inline bool check_reg_addr(std::size_t regaddr) {
         if (regaddr > 15 or regaddr < 0) return true;
         return false;
     }
+
+
     class core {
         private:
             // Регистры, их 16 штук
@@ -95,9 +240,10 @@ namespace cpu_unit {
             // Таблица прерываний
             int intr_table[16];
 
-            // Указатель на оперативную память
-            memory::ram RAM;
+            const std::size_t memory_size = 4096;
 
+            // Оперативная память
+            utility_units::memory RAM;
 
             // Инструкции для работы с памятью
 
@@ -114,6 +260,7 @@ namespace cpu_unit {
                     } else {
                         registers[accumulator] = RAM.get_from_memory(static_adress);
                     }
+                    registers[14] += 4; // Увеличиваем указатель инструкции на шаг
                 }
 
                 // Загрузить из ОЗУ в регистр, адрес берётся из регистра, при safe_address_mode проверяет на доступность адреса
@@ -129,6 +276,7 @@ namespace cpu_unit {
                     } else {
                         registers[accumulator] = RAM.get_from_memory(registers[reg_addressator]);
                     }
+                    registers[14] += 4; // Увеличиваем указатель инструкции на шаг
                 }
 
                 // Запись в ОЗУ по статичному адресу
@@ -144,6 +292,7 @@ namespace cpu_unit {
                     } else {
                         RAM.set_to_memory(static_adress, registers[reg]);
                     }
+                    registers[14] += 4; // Увеличиваем указатель инструкции на шаг
                 }
 
                 // Запись в ОЗУ по статичному адресу
@@ -159,6 +308,7 @@ namespace cpu_unit {
                     } else {
                         RAM.set_to_memory(registers[reg_addressator], registers[reg]);
                     }
+                    registers[14] += 4; // Увеличиваем указатель инструкции на шаг
                 }
 
                 // Установка максимального и минимального адреса
@@ -167,16 +317,19 @@ namespace cpu_unit {
                 void amin(raddr reg_min, raddr reg_max) {
                     memory_addres_min = registers[reg_min];
                     memory_addres_max = registers[reg_max];
+                    registers[14] += 4; // Увеличиваем указатель инструкции на шаг
                 }
 
                 // Включение проверки адреса
                 void setl() {
                     safe_address_mode = true;
+                    registers[14] += 4; // Увеличиваем указатель инструкции на шаг
                 }
 
                 // Выключение проверки адреса
                 void setf() {
                     safe_address_mode = false;
+                    registers[14] += 4; // Увеличиваем указатель инструкции на шаг
                 }
 
             // Арифметические инструкции
@@ -188,6 +341,7 @@ namespace cpu_unit {
                 void add(raddr accumulator, raddr sum1, raddr sum2) {
                     if (check_reg_addr(accumulator) or check_reg_addr(sum1) or check_reg_addr(sum2)) {return;}
                     registers[accumulator] = registers[sum1] + registers[sum2];
+                    registers[14] += 4; // Увеличиваем указатель инструкции на шаг
                 }
 
                 // Инструкция сложения с константой
@@ -197,6 +351,7 @@ namespace cpu_unit {
                 void add(raddr accumulator, raddr sum1, int value) {
                     if (check_reg_addr(accumulator) or check_reg_addr(sum1)) {return;}
                     registers[accumulator] = registers[sum1] + value;
+                    registers[14] += 4; // Увеличиваем указатель инструкции на шаг
                 }
 
                 // Запись в регистр константы
@@ -205,6 +360,7 @@ namespace cpu_unit {
                 void loc(raddr accumulator, int value) {
                     if (check_reg_addr(accumulator)) {return;}
                     registers[accumulator] = value;
+                    registers[14] += 4; // Увеличиваем указатель инструкции на шаг
                 }
 
                 // Инструкция вычитания
@@ -214,6 +370,7 @@ namespace cpu_unit {
                 void sub(raddr accumulator, raddr sub1, raddr sub2) {
                     if (check_reg_addr(accumulator) or check_reg_addr(sub1) or check_reg_addr(sub2)) {return;}
                     registers[accumulator] = registers[sub1] - registers[sub2];
+                    registers[14] += 4; // Увеличиваем указатель инструкции на шаг
                 }
 
                 // Инструкция умножения
@@ -223,6 +380,7 @@ namespace cpu_unit {
                 void mult(raddr accumulator, raddr mult1, raddr mult2) {
                     if (check_reg_addr(accumulator) or check_reg_addr(mult1) or check_reg_addr(mult2)) {return;}
                     registers[accumulator] = registers[mult1] * registers[mult2];
+                    registers[14] += 4; // Увеличиваем указатель инструкции на шаг
                 }
 
                 // Инструкция деления, ложит в аккумулятор частное
@@ -232,6 +390,7 @@ namespace cpu_unit {
                 void div(raddr accumulator, raddr div1, raddr div2) {
                     if (check_reg_addr(accumulator) or check_reg_addr(div1) or check_reg_addr(div2)) {return;}
                     registers[accumulator] = registers[div1] / registers[div2];
+                    registers[14] += 4; // Увеличиваем указатель инструкции на шаг
                 }
 
                 // Инструкция остатка деления, ложит в аккумулятор остаток
@@ -241,6 +400,7 @@ namespace cpu_unit {
                 void mod(raddr accumulator, raddr mod1, raddr mod2) {
                     if (check_reg_addr(accumulator) or check_reg_addr(mod1) or check_reg_addr(mod2)) {return;}
                     registers[accumulator] = registers[mod1] % registers[mod2];
+                    registers[14] += 4; // Увеличиваем указатель инструкции на шаг
                 }
 
             // Условные переходы и сравнения
@@ -248,6 +408,9 @@ namespace cpu_unit {
                 // Сравнение значений
                 // reg1 - адрес регистра первого значения
                 // reg2 - адрес регистра второго значения
+                // = 0
+                // > 1
+                // < -1
                 void cmp(raddr reg1, raddr reg2) {
                     if (check_reg_addr(reg1) or check_reg_addr(reg2)) {return;}
                     if (registers[reg1] == registers[reg2]) {
@@ -255,8 +418,36 @@ namespace cpu_unit {
                     } else if (registers[reg1] > registers[reg2]) {
                         cmp_flag = 1;
                     } else {
-                        cmp_flag = 0;
+                        cmp_flag = -1;
                     }
+                    registers[14] += 4; // Увеличиваем указатель инструкции на шаг
+                }
+
+                // Условный переход
+                // condition - условие (= 0; > 1; < -1; >= 2; <= -2; != 3)
+                // gotoaddr - адресс перехода
+                void jmp(int condition, std::size_t gotoaddr) {
+                    if (cmp_flag == condition) {
+                        registers[14] = gotoaddr;
+                        return;
+                    } else if ((cmp_flag == 1 or cmp_flag == 0) and condition == 2) {
+                        registers[14] = gotoaddr;
+                        return;
+                    } else if ((cmp_flag == -1 or cmp_flag == 0) and condition == -2) {
+                        registers[14] = gotoaddr;
+                        return;
+                    } else if (cmp_flag != 0 and condition == 3) {
+                        registers[14] = gotoaddr;
+                        return;
+                    }
+                    registers[14] += 4;
+
+                }
+
+                // Безусловный переход
+                // gotoaddr - адрес перехода
+                void gotop(std::size_t gotoaddr) {
+                    registers[14] = gotoaddr;
                 }
 
 
