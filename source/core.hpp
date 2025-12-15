@@ -2,9 +2,12 @@
 
 #include <cstdlib>
 #include <stdexcept>
+#include <sys/types.h>
 #include <vector> // До последнего не хотел его использовать
 #include <memory>
 #include "utility_units.hpp"
+#include <iostream>
+#include <iomanip>
 
 #define raddr std::size_t
 /*
@@ -70,7 +73,7 @@ namespace cpu_unit {
         return false;
     }
 
-    // Класс памятиs
+    // Класс памяти
     class memory {
     private:
         // Максимальный адрес
@@ -143,8 +146,6 @@ namespace cpu_unit {
 
             // Включены ли системные вызовы, при false просто игнорирует системные вызовы
             bool syscals = false;
-            // Таймер системного вызова, после каждой инструкции + 1
-            unsigned syscall_timer = 0;
 
             // Флаг ошибки, должен обрабатываться при системном вызове
             // 0 - нет ошибки
@@ -231,6 +232,15 @@ namespace cpu_unit {
                     registers[14] += 4; // Увеличиваем указатель инструкции на шаг
                 }
 
+                // копирование из одно регистра в другой
+                // reg1 - регистр назначения
+                // reg2 - регистр откуда скопировать
+                void mov(raddr reg1, raddr reg2) {
+                    check_reg_addr(reg1);
+                    check_reg_addr(reg2);
+                    registers[reg1] = registers[reg2];
+                }
+
                 // Установка максимального и минимального адреса
                 // reg_min - адресс регистра хранящего минимальный адрес
                 // reg_max - адресс регистра хранящего максимальный адрес
@@ -268,7 +278,7 @@ namespace cpu_unit {
                 // accumulator - адрес регистра результата
                 // sum1 - адрес регистра первого слагаемого
                 // value - значение
-                void add(raddr accumulator, raddr sum1, int value) {
+                void addc(raddr accumulator, raddr sum1, int value) {
                     if (check_reg_addr(accumulator) or check_reg_addr(sum1)) {return;}
                     registers[accumulator] = registers[sum1] + value;
                     registers[14] += 4; // Увеличиваем указатель инструкции на шаг
@@ -377,12 +387,139 @@ namespace cpu_unit {
                     registers[14] += 4;
                 }
 
+            // Базовые логические операторы
+
+                // Логическое И между двумя регистрами
+                // accumulator - регистр ответа
+                // reg1 - регистр первого значения
+                // reg2 - регистр второго значения
+                void logand(raddr accumulator, raddr reg1, raddr reg2) {
+                    check_reg_addr(accumulator);
+                    check_reg_addr(reg1);
+                    check_reg_addr(reg2);
+                    registers[accumulator] = registers[reg1] and registers[reg2];
+                    registers[14] += 4;
+                }
+
+                // Логическое ИЛИ между двумя регистрами
+                // accumulator - регистр ответа
+                // reg1 - регистр первого значения
+                // reg2 - регистр второго значения
+                void logor(raddr accumulator, raddr reg1, raddr reg2) {
+                    check_reg_addr(accumulator);
+                    check_reg_addr(reg1);
+                    check_reg_addr(reg2);
+                    registers[accumulator] = registers[reg1] or registers[reg2];
+                    registers[14] += 4;
+                }
+
+                // Логическое НЕ над регистром
+                // accumulator - регистр ответа
+                // reg - регистр значения
+                void lognot(raddr accumulator, raddr reg) {
+                    check_reg_addr(accumulator);
+                    check_reg_addr(reg);
+                    registers[accumulator] = not registers[reg];
+                    registers[14] += 4;
+                }
+
             // Операции работы с портами
 
+                // Отправить на порт значение
+                // reg - адрес отправляемого значения
+                // port - порт
+                void prts(raddr reg, int port) {
+                    check_reg_addr(reg);
+                    if (ports.size() > port) {
+                        ports[port]->send_value(registers[reg]);
+                    }
+                    registers[14] += 4;
+                }
 
-                void prts(raddr reg, raddr port) {
-                    if (ports.size() > registers[port]) {
+                // Отправить на порт сигнал
+                // signal - код сигнала
+                // port - порт
+                void prcs(int signal, int port) {
+                    if (ports.size() > port) {
+                        ports[port]->send_signal(signal);
+                    }
+                    registers[14] += 4;
+                }
 
+                // Получить с порта значение
+                // reg - регистр назначения
+                // port - порт
+                void prtg(raddr reg, int port) {
+                    check_reg_addr(reg);
+                    if (ports.size() > port) {
+                        ports[port]->ret_value(registers[reg]);
+                    }
+                    registers[14] += 4;
+                }
+
+                // Получить состояние с порта в регистр
+                // reg - регистр назначения
+                // port - порт
+                void prcg(raddr reg, int port) {
+                    check_reg_addr(reg);
+                    if (ports.size() > port) {
+                        ports[port]->ret_signal(registers[reg]);
+                    }
+                    registers[14] += 4;
+                }
+
+                void process(bool debugmode) {
+                    bool is_work = true;
+                    while (is_work) {
+                        // Декодируем из памяти команду
+                        if (registers[14]+3 >= memory_size) {is_work = false; break;}
+                        decoded[0] = RAM.get_from_memory(registers[14]);
+                        decoded[1] = RAM.get_from_memory(registers[14]+1);
+                        decoded[2] = RAM.get_from_memory(registers[14]+2);
+                        decoded[3] = RAM.get_from_memory(registers[14]+3);
+
+                        switch (decoded[0]) {
+                            case  5: {lodi(decoded[1], decoded[2]); break;}
+                            case  6: {lodr(decoded[1], decoded[2]); break;}
+                            case  7: {stri(decoded[1], decoded[2]); break;}
+                            case  8: {strr(decoded[1], decoded[2]); break;}
+                            case  9: {mov(decoded[1], decoded[2]); break;}
+                            case 10: {amin(decoded[1], decoded[2]); break;}
+                            case 11: {setl(); break;}
+                            case 12: {setf(); break;}
+                            case 20: {add(decoded[1], decoded[2], decoded[3]); break;}
+                            case 21: {addc(decoded[1], decoded[2], decoded[3]); break;}
+                            case 22: {loc(decoded[1], decoded[2]); break;}
+                            case 23: {sub(decoded[1], decoded[2], decoded[3]); break;}
+                            case 24: {mult(decoded[1], decoded[2], decoded[3]); break;}
+                            case 25: {div(decoded[1], decoded[2], decoded[3]); break;}
+                            case 26: {mod(decoded[1], decoded[2], decoded[3]); break;}
+                            case 30: {cmp(decoded[1], decoded[2]); break;}
+                            case 31: {jmp(decoded[1], decoded[2]); break;}
+                            case 32: {gotop(decoded[1]); break;}
+                            case 33: {lcmp(decoded[1]); break;}
+                            case 40: {logor(decoded[1], decoded[2], decoded[3]); break;}
+                            case 41: {logand(decoded[1], decoded[2], decoded[3]); break;}
+                            case 42: {lognot(decoded[1], decoded[2]); break;}
+                            case 50: {prts(decoded[1], decoded[2]); break;}
+                            case 51: {prcs(decoded[1], decoded[2]); break;}
+                            case 52: {prtg(decoded[1], decoded[2]); break;}
+                            case 53: {prcg(decoded[1], decoded[2]); break;}
+                            case  0: {is_work = false; break;}
+                            default: {err_flag = 5; is_work = false; break;}
+                        }
+                        if (debugmode) {
+                            std::cout << "Comand: " << decoded[0] << " "<< decoded[1] << " "<< decoded[2] << " "<< decoded[3] << "\n";
+                            std::cout << std::setw(4) << registers[0] << std::setw(4) << registers[1] << "\n";
+                            std::cout << std::setw(4) << registers[2] << std::setw(4) << registers[3] << "\n";
+                            std::cout << std::setw(4) << registers[4] << std::setw(4) << registers[5] << "\n";
+                            std::cout << std::setw(4) << registers[6] << std::setw(4) << registers[7] << "\n";
+                            std::cout << std::setw(4) << registers[8] << std::setw(4) << registers[9] << "\n";
+                            std::cout << std::setw(4) << registers[10] << std::setw(4) << registers[11] << "\n";
+                            std::cout << std::setw(4) << registers[12] << std::setw(4) << registers[13] << "\n";
+                            std::cout << std::setw(4) << registers[14] << std::setw(4) << registers[15] << "\n";
+                            std::cout << "--------\n";
+                        }
                     }
                 }
 
@@ -408,8 +545,10 @@ namespace cpu_unit {
                 RAM.init(memory_size, program);
             }
 
-            void start_process() {
-
+            void start_process(bool debugmode) {
+                std::cout << "Process start!\n";
+                process(debugmode);
+                std::cout << "Process end!\n";
             }
 
 
