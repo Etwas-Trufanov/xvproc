@@ -78,9 +78,13 @@ namespace cpu_unit {
         // Массив ячеек
         int *m;
     public:
-        // Конструктор, принимает размер памяти
-        memory() : size_ram(4096) {
+        // инициализатор, принимает размер памяти и программу
+        void init(std::size_t size, std::vector<int> &program) {
+            size_ram = size;
             m = new int[size_ram];
+            for (std::size_t i = 0; i < program.size(); i++) {
+                m[i] = program[i];
+            }
         }
 
         // Геттер из ячейки по адресу
@@ -113,7 +117,6 @@ namespace cpu_unit {
         ~memory() {
             delete[] m;
         }
-
 
     };
 
@@ -154,7 +157,7 @@ namespace cpu_unit {
             // Таблица прерываний
             int intr_table[16];
 
-            const std::size_t memory_size = 4096;
+            std::size_t memory_size;
 
             // Оперативная память
             memory RAM;
@@ -366,9 +369,46 @@ namespace cpu_unit {
                     registers[14] = gotoaddr;
                 }
 
+                // Сохранить флаг сравнения в регистр
+                // reg - адрес регистра
+                void lcmp(raddr reg) {
+                    check_reg_addr(reg);
+                    registers[reg] = cmp_flag;
+                    registers[14] += 4;
+                }
+
+            // Операции работы с портами
+
+
+                void prts(raddr reg, raddr port) {
+                    if (ports.size() > registers[port]) {
+
+                    }
+                }
+
         public:
-            void init(std::vector<int> &program) {
-                ports.push_back(std::make_unique<utility_units::terminal>);
+            // Метод инициализатор
+            // program - программа
+            // ram_size - размер выделяемой ОЗУ
+            // если размер ОЗУ слишком малый (<4), то бросается исключение
+            // если размер программы больше чем ОЗУ, то Бросается исключение
+            void init(std::vector<int> &program, std::size_t ram_size) {
+                // Проверка на минимальный объём
+                if (ram_size < 4) {
+                    throw std::runtime_error("Too little memory allocated (min = 4)");
+                }
+                // Проверка на размеры программы и памяти
+                if (program.size() > memory_size) {
+                    throw std::runtime_error("Init error, program size bigger then dedicated memory");
+                }
+                // Подключение портов
+                ports.push_back(std::make_unique<utility_units::terminal>());
+                ports.push_back(std::make_unique<utility_units::fileunit>());
+                memory_size = ram_size;
+                RAM.init(memory_size, program);
+            }
+
+            void start_process() {
 
             }
 
