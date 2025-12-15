@@ -1,12 +1,10 @@
 #pragma once
 
-#include <cmath>
 #include <cstdlib>
 #include <stdexcept>
-#include <iostream>
 #include <vector> // До последнего не хотел его использовать
 #include <memory>
-#include <fstream>
+#include "utility_units.hpp"
 
 #define raddr std::size_t
 /*
@@ -64,7 +62,14 @@
  !cerr   0               0               0       : очистить флаг ошибки
 */
 
-namespace utility_units {
+
+
+namespace cpu_unit {
+    inline bool check_reg_addr(std::size_t regaddr) {
+        if (regaddr > 15 or regaddr < 0) return true;
+        return false;
+    }
+
     // Класс памятиs
     class memory {
     private:
@@ -112,97 +117,6 @@ namespace utility_units {
 
     };
 
-    // Виртуальный класс порта
-    class virtual_port {
-        protected:
-            // Состояние устройства, для каждого устройства свои коды
-            int return_state = 0;
-        public:
-            virtual void send_value(int value) = 0;
-            virtual void send_signal(int value) = 0;
-            virtual void ret_value(int &answer) = 0;
-            virtual void ret_signal(int &answer) = 0;
-            ~virtual_port() = default;
-    };
-
-    // Класс наследник виртуального порта, позволяет работать с терминалом
-    class terminal : public virtual_port {
-            void send_value(int value) override {
-                std::cout << value;
-            }
-
-            void send_signal(int value) override {
-                return;
-            }
-
-            void ret_value(int &answer) override {
-                char a;
-                std::cin >> a;
-                answer = a;
-            }
-
-            void ret_signal(int &answer) override {
-                answer = return_state;
-            }
-    };
-
-    // Класс наследник виртуального порта, позволяет худо бедно работать с файловой системой
-    class disk : public virtual_port {
-        protected:
-            std::string filename;
-            std::fstream f;
-            // Флаг режима работы
-            // 0 - файл закрыт
-            // 1 - файл открыт для чтения
-            // 2 - файл открыт для записи
-            int mode = 0;
-        public:
-
-            // Получили какое-то значение, надо что-то с ним делать
-            void send_value(int value) override {
-                if (f.is_open()) {
-                    f << value;
-                } else {
-                   filename += char(value);
-                }
-            }
-
-            // Получаем контролирующий сигнал
-            // Для фаловой подсистемы
-            // 2 - открыть файл под именем filename в режиме чтения
-            // 3 - в режиме записи
-            void send_signal(int value) override {
-                if (!f.is_open()) {
-                    try {
-                        if (value == 2) {
-                            f.open(filename, std::ios::in);
-                        } else {
-                            f.open(filename, std::ios::out);
-                        }
-                    } catch (std::runtime_error &e) {
-                        f.close();
-                        std::cerr << "\nSYSTEM: Can't open file: " <<filename << "in mode: "<<value << std::endl;;
-                        return_state = 1;
-                    }
-                }
-            }
-
-            void ret_value(int &answer) override {
-                if (f.is_open() and f.) {
-                    char c;
-
-                }
-            }
-
-    };
-}
-
-namespace cpu_unit {
-    inline bool check_reg_addr(std::size_t regaddr) {
-        if (regaddr > 15 or regaddr < 0) return true;
-        return false;
-    }
-
 
     class core {
         private:
@@ -243,7 +157,10 @@ namespace cpu_unit {
             const std::size_t memory_size = 4096;
 
             // Оперативная память
-            utility_units::memory RAM;
+            memory RAM;
+
+            // Устройства подключённые к процессору
+            std::vector<std::unique_ptr<utility_units::virtual_port>> ports;
 
             // Инструкции для работы с памятью
 
@@ -404,7 +321,6 @@ namespace cpu_unit {
                 }
 
             // Условные переходы и сравнения
-
                 // Сравнение значений
                 // reg1 - адрес регистра первого значения
                 // reg2 - адрес регистра второго значения
@@ -449,6 +365,12 @@ namespace cpu_unit {
                 void gotop(std::size_t gotoaddr) {
                     registers[14] = gotoaddr;
                 }
+
+        public:
+            void init(std::vector<int> &program) {
+                ports.push_back(std::make_unique<utility_units::terminal>);
+
+            }
 
 
     };
