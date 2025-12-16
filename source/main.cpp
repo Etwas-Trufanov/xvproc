@@ -12,7 +12,6 @@ void load_program(std::string &filename, std::vector<int> &output) {
   int value;
   std::ifstream f(filename);
   while (f >> value) {
-    std::cout << value << std::endl;
     output.push_back(value);
   }
 }

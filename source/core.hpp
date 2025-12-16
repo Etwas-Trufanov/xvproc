@@ -193,6 +193,7 @@ namespace cpu_unit {
                     if (safe_address_mode) {
                         if (registers[reg_addressator] >= memory_addres_min and registers[reg_addressator] <= memory_addres_max) {
                             registers[accumulator] = RAM.get_from_memory(registers[reg_addressator]);
+                            std::cout << RAM.get_from_memory(registers[reg_addressator]) << " " <<reg_addressator << std::endl;
                         } else {
                             err_flag = 1;
                         }
@@ -370,8 +371,9 @@ namespace cpu_unit {
                         registers[14] = gotoaddr;
                     } else if (condition == 3 and cmp_flag != 0) {
                         registers[14] = gotoaddr;
+                    } else {
+                        registers[14] += 4;
                     }
-                    registers[14] += 4;
                 }
 
                 // Безусловный переход
@@ -519,6 +521,7 @@ namespace cpu_unit {
                             std::cout << std::setw(4) << registers[10] << std::setw(4) << registers[11] << "\n";
                             std::cout << std::setw(4) << registers[12] << std::setw(4) << registers[13] << "\n";
                             std::cout << std::setw(4) << registers[14] << std::setw(4) << registers[15] << "\n";
+                            std::cout << cmp_flag << std::endl;
                             std::cout << "--------\n";
                             char tmp;
                             std::cin >> tmp;

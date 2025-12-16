@@ -21,7 +21,7 @@ namespace utility_units {
     // Класс наследник виртуального порта, позволяет работать с терминалом
     class terminal : public virtual_port {
         void send_value(int value) override {
-            std::cout << value;
+            std::cout << char(value);
         }
 
         void send_signal(int value) override {
