@@ -144,9 +144,10 @@ namespace cpu_unit {
             // Если true, то процессор смотрит, есть ли доступ к адресу перед get_from_memory()
             bool safe_address_mode = false;
 
-            // Включены ли системные вызовы, при false просто игнорирует системные вызовы
+            // Включены ли системные вызовы, при false просто игнорирует системные вызовы (пока не реализованы)
             bool syscals = false;
 
+            // (пока не реализовано)
             // Флаг ошибки, должен обрабатываться при системном вызове
             // 0 - нет ошибки
             // 1 - ошибка сегментации
@@ -155,6 +156,7 @@ namespace cpu_unit {
             // 5 - ошибка инструкции (неверная инструкция)
             int err_flag = 0;
 
+            // Пока не реализовано
             // Таблица прерываний
             int intr_table[16];
 
@@ -356,21 +358,20 @@ namespace cpu_unit {
                 // condition - условие (= 0; > 1; < -1; >= 2; <= -2; != 3)
                 // gotoaddr - адресс перехода
                 void jmp(int condition, std::size_t gotoaddr) {
-                    if (cmp_flag == condition) {
+                    if (condition == 0 and cmp_flag == 0) {
                         registers[14] = gotoaddr;
-                        return;
-                    } else if ((cmp_flag == 1 or cmp_flag == 0) and condition == 2) {
+                    } else if (condition == 1 and cmp_flag == 1) {
                         registers[14] = gotoaddr;
-                        return;
-                    } else if ((cmp_flag == -1 or cmp_flag == 0) and condition == -2) {
+                    } else if (condition == -1 and cmp_flag == -1) {
                         registers[14] = gotoaddr;
-                        return;
-                    } else if (cmp_flag != 0 and condition == 3) {
+                    } else if (condition == 2 and (cmp_flag == 0 or cmp_flag == 1)) {
                         registers[14] = gotoaddr;
-                        return;
+                    } else if (condition == -2 and (cmp_flag == 0 or cmp_flag == -1)) {
+                        registers[14] = gotoaddr;
+                    } else if (condition == 3 and cmp_flag != 0) {
+                        registers[14] = gotoaddr;
                     }
                     registers[14] += 4;
-
                 }
 
                 // Безусловный переход
@@ -519,6 +520,8 @@ namespace cpu_unit {
                             std::cout << std::setw(4) << registers[12] << std::setw(4) << registers[13] << "\n";
                             std::cout << std::setw(4) << registers[14] << std::setw(4) << registers[15] << "\n";
                             std::cout << "--------\n";
+                            char tmp;
+                            std::cin >> tmp;
                         }
                     }
                 }
@@ -543,6 +546,7 @@ namespace cpu_unit {
                 ports.push_back(std::make_unique<utility_units::fileunit>());
                 memory_size = ram_size;
                 RAM.init(memory_size, program);
+                for (std::size_t i = 0; i < 16; i++) {registers[i] = 0;}
             }
 
             void start_process(bool debugmode) {
