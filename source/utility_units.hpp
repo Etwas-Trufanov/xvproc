@@ -19,19 +19,26 @@ namespace utility_units {
     };
 
     // Класс наследник виртуального порта, позволяет работать с терминалом
+    // При состоянии 0 - считывает и выводит символ
+    // При состоянии 1 - считывает и выводит число
     class terminal : public virtual_port {
         void send_value(int value) override {
-            std::cout << char(value);
+            if (return_state == 0) {std::cout << char(value);}
+            else {std::cout << value;}
         }
 
         void send_signal(int value) override {
-            return;
+            return_state = value;
         }
 
         void ret_value(int &answer) override {
-            char a;
-            std::cin >> a;
-            answer = a;
+            if (return_state == 0) {
+                char a;
+                std::cin >> a;
+                answer = a;
+            } else {
+                std::cin >> answer;
+            }
         }
 
         void ret_signal(int &answer) override {
