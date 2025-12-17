@@ -273,6 +273,7 @@ namespace cpu_unit {
                     check_reg_addr(reg1);
                     check_reg_addr(reg2);
                     registers[reg1] = registers[reg2];
+                    registers[14] += 4;
                 }
 
                 // Установка максимального и минимального адреса
@@ -572,7 +573,7 @@ namespace cpu_unit {
                             std::cout << std::setw(4) << registers[10] << std::setw(4) << registers[11] << "\n";
                             std::cout << std::setw(4) << registers[12] << std::setw(4) << registers[13] << "\n";
                             std::cout << std::setw(4) << registers[14] << std::setw(4) << registers[15] << "\n";
-                            std::cout << cmp_flag << std::endl;
+                            std::cout << "CMP:" << cmp_flag << std::endl;
                             std::cout << "--------\n";
                             char tmp;
                             std::cin >> tmp;
