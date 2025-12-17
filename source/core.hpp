@@ -68,9 +68,40 @@
 
 
 namespace cpu_unit {
+
+
+    enum class OpCode : int {
+        HALT = 0,
+        LODI = 5,
+        LODR = 6,
+        STRI = 7,
+        STRR = 8,
+        MOV = 9,
+        AMIN = 10,
+        SETL = 11,
+        SETF = 12,
+        ADD = 20,
+        ADDC = 21,
+        LOC = 22,
+        SUB = 23,
+        MULT = 24,
+        DIV = 25,
+        MOD = 26,
+        CMP = 30,
+        JMP = 31,
+        GOTO = 32,
+        LCMP = 33,
+        OR = 40,
+        AND = 41,
+        NOT = 42,
+        PRTS = 50,
+        PRCS = 51,
+        PRTG = 52,
+        PRCG = 53
+    };
+
     inline bool check_reg_addr(std::size_t regaddr) {
-        if (regaddr > 15 or regaddr < 0) return true;
-        return false;
+        return regaddr >= 16;  // Регистры 0-15
     }
 
     // Класс памяти
@@ -433,9 +464,12 @@ namespace cpu_unit {
                 // port - порт
                 void prts(raddr reg, int port) {
                     check_reg_addr(reg);
-                    if (ports.size() > port) {
-                        ports[port]->send_value(registers[reg]);
+                    if (port < 0 || static_cast<size_t>(port) >= ports.size()) {
+                        // Ошибка: порт не существует
+                        err_flag = 6; // Неверный порт
+                        return;
                     }
+                    ports[port]->send_value(registers[reg]);
                     registers[14] += 4;
                 }
 
@@ -443,6 +477,11 @@ namespace cpu_unit {
                 // signal - код сигнала
                 // port - порт
                 void prcs(int signal, int port) {
+                    if (port < 0 || static_cast<size_t>(port) >= ports.size()) {
+                        // Ошибка: порт не существует
+                        err_flag = 6; // Неверный порт
+                        return;
+                    }
                     if (ports.size() > port) {
                         ports[port]->send_signal(signal);
                     }
@@ -453,6 +492,11 @@ namespace cpu_unit {
                 // reg - регистр назначения
                 // port - порт
                 void prtg(raddr reg, int port) {
+                    if (port < 0 || static_cast<size_t>(port) >= ports.size()) {
+                        // Ошибка: порт не существует
+                        err_flag = 6; // Неверный порт
+                        return;
+                    }
                     check_reg_addr(reg);
                     if (ports.size() > port) {
                         ports[port]->ret_value(registers[reg]);
@@ -464,6 +508,11 @@ namespace cpu_unit {
                 // reg - регистр назначения
                 // port - порт
                 void prcg(raddr reg, int port) {
+                    if (port < 0 || static_cast<size_t>(port) >= ports.size()) {
+                        // Ошибка: порт не существует
+                        err_flag = 6; // Неверный порт
+                        return;
+                    }
                     check_reg_addr(reg);
                     if (ports.size() > port) {
                         ports[port]->ret_signal(registers[reg]);
@@ -481,36 +530,38 @@ namespace cpu_unit {
                         decoded[2] = RAM.get_from_memory(registers[14]+2);
                         decoded[3] = RAM.get_from_memory(registers[14]+3);
 
-                        switch (decoded[0]) {
-                            case  5: {lodi(decoded[1], decoded[2]); break;}
-                            case  6: {lodr(decoded[1], decoded[2]); break;}
-                            case  7: {stri(decoded[1], decoded[2]); break;}
-                            case  8: {strr(decoded[1], decoded[2]); break;}
-                            case  9: {mov(decoded[1], decoded[2]); break;}
-                            case 10: {amin(decoded[1], decoded[2]); break;}
-                            case 11: {setl(); break;}
-                            case 12: {setf(); break;}
-                            case 20: {add(decoded[1], decoded[2], decoded[3]); break;}
-                            case 21: {addc(decoded[1], decoded[2], decoded[3]); break;}
-                            case 22: {loc(decoded[1], decoded[2]); break;}
-                            case 23: {sub(decoded[1], decoded[2], decoded[3]); break;}
-                            case 24: {mult(decoded[1], decoded[2], decoded[3]); break;}
-                            case 25: {div(decoded[1], decoded[2], decoded[3]); break;}
-                            case 26: {mod(decoded[1], decoded[2], decoded[3]); break;}
-                            case 30: {cmp(decoded[1], decoded[2]); break;}
-                            case 31: {jmp(decoded[1], decoded[2]); break;}
-                            case 32: {gotop(decoded[1]); break;}
-                            case 33: {lcmp(decoded[1]); break;}
-                            case 40: {logor(decoded[1], decoded[2], decoded[3]); break;}
-                            case 41: {logand(decoded[1], decoded[2], decoded[3]); break;}
-                            case 42: {lognot(decoded[1], decoded[2]); break;}
-                            case 50: {prts(decoded[1], decoded[2]); break;}
-                            case 51: {prcs(decoded[1], decoded[2]); break;}
-                            case 52: {prtg(decoded[1], decoded[2]); break;}
-                            case 53: {prcg(decoded[1], decoded[2]); break;}
-                            case  0: {is_work = false; break;}
-                            default: {err_flag = 5; is_work = false; break;}
+                        // Выполняем инструкцию
+                        switch (static_cast<OpCode>(decoded[0])) {
+                            case OpCode::LODI:  lodi(decoded[1], decoded[2]); break;
+                            case OpCode::LODR:  lodr(decoded[1], decoded[2]); break;
+                            case OpCode::STRI:  stri(decoded[1], decoded[2]); break;
+                            case OpCode::STRR:  strr(decoded[1], decoded[2]); break;
+                            case OpCode::MOV:   mov(decoded[1], decoded[2]); break;
+                            case OpCode::AMIN:  amin(decoded[1], decoded[2]); break;
+                            case OpCode::SETL:  setl(); break;
+                            case OpCode::SETF:  setf(); break;
+                            case OpCode::ADD:   add(decoded[1], decoded[2], decoded[3]); break;
+                            case OpCode::ADDC:  addc(decoded[1], decoded[2], decoded[3]); break;
+                            case OpCode::LOC:   loc(decoded[1], decoded[2]); break;
+                            case OpCode::SUB:   sub(decoded[1], decoded[2], decoded[3]); break;
+                            case OpCode::MULT:  mult(decoded[1], decoded[2], decoded[3]); break;
+                            case OpCode::DIV:   div(decoded[1], decoded[2], decoded[3]); break;
+                            case OpCode::MOD:   mod(decoded[1], decoded[2], decoded[3]); break;
+                            case OpCode::CMP:   cmp(decoded[1], decoded[2]); break;
+                            case OpCode::JMP:   jmp(decoded[1], decoded[2]); break;
+                            case OpCode::GOTO:  gotop(decoded[1]); break;
+                            case OpCode::LCMP:  lcmp(decoded[1]); break;
+                            case OpCode::OR:    logor(decoded[1], decoded[2], decoded[3]); break;
+                            case OpCode::AND:   logand(decoded[1], decoded[2], decoded[3]); break;
+                            case OpCode::NOT:   lognot(decoded[1], decoded[2]); break;
+                            case OpCode::PRTS:  prts(decoded[1], decoded[2]); break;
+                            case OpCode::PRCS:  prcs(decoded[1], decoded[2]); break;
+                            case OpCode::PRTG:  prtg(decoded[1], decoded[2]); break;
+                            case OpCode::PRCG:  prcg(decoded[1], decoded[2]); break;
+                            case OpCode::HALT:  is_work = false; break;
+                            default:            err_flag = 5; is_work = false; break;
                         }
+                        // Если процесс в режиме дебага, то вывести значения регистров
                         if (debugmode) {
                             std::cout << "Comand: " << decoded[0] << " "<< decoded[1] << " "<< decoded[2] << " "<< decoded[3] << "\n";
                             std::cout << std::setw(4) << registers[0] << std::setw(4) << registers[1] << "\n";
@@ -540,22 +591,25 @@ namespace cpu_unit {
                 if (ram_size < 4) {
                     throw std::runtime_error("Too little memory allocated (min = 4)");
                 }
+                // инициализируем память
+                memory_size = ram_size;
+                RAM.init(memory_size, program);
                 // Проверка на размеры программы и памяти
                 if (program.size() > memory_size) {
-                    throw std::runtime_error("Init error, program size bigger then dedicated memory");
+                    throw std::runtime_error("Init error...");
                 }
                 // Подключение портов
                 ports.push_back(std::make_unique<utility_units::terminal>());
                 ports.push_back(std::make_unique<utility_units::fileunit>());
-                memory_size = ram_size;
-                RAM.init(memory_size, program);
                 for (std::size_t i = 0; i < 16; i++) {registers[i] = 0;}
             }
 
+            // Метод запуска процесса вычислений
+            // debugmode - режим дебага, при нём выводятся регистры
             void start_process(bool debugmode) {
-                std::cout << "Process start!\n";
+                if (debugmode) std::cout << "Process start!\n";
                 process(debugmode);
-                std::cout << "Process end!\n";
+                if (debugmode) std::cout << "Process end!\n";
             }
 
 
