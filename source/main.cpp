@@ -25,6 +25,7 @@ int main(int argc, char **argv) {
   // 3. (опционально) Флаг -debug для включения отладочного режима
   if (not (argc == 3 or argc == 4)) {
     std::cerr << "Invalid arguments\n";
+    std::cout << "Usage: " << argv[0] << " filename ram_size -debug(or not)\n";
     return 1; // Возврат кода ошибки: неверные аргументы
   }
 
